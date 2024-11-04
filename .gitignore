@@ -1,0 +1,7 @@
+data/
+downloads/
+extracted_images/
+figures/
+__pycache__/
+venv/
+

@@ -1,5 +1,5 @@
 # THIS IS EXPERIMENTAL! IT RELIES ON A NON-YET-MERGED BRANCH OF TRANFORMERS? IT WONT WORK OUT OF THE BOX.
-
+# SEE: Issue 3 (https://github.com/aymeric-roucher/GAIA/issues/3), this should be fixed
 
 import asyncio
 import os
@@ -39,9 +39,10 @@ USE_OPEN_MODELS = False
 USE_JSON = False
 
 SET = "validation"
+SET = "train" # agents_small_benchmark only has train
 
 # proprietary_llm_engine = AnthropicEngine(use_bedrock=True)
-proprietary_llm_engine = AnthropicEngine()
+#proprietary_llm_engine = AnthropicEngine()
 
 repo_id_llama3 = "meta-llama/Meta-Llama-3-70B-Instruct"
 repo_id_command_r = "CohereForAI/c4ai-command-r-plus"
@@ -49,22 +50,24 @@ repo_id_gemma2 = "google/gemma-2-27b-it"
 repo_id_llama = "meta-llama/Meta-Llama-3.1-70B-Instruct"
 
 REPO_ID_OS_MODEL = repo_id_llama
-### LOAD EVALUATION DATASET
 
-eval_ds = datasets.load_dataset("gaia-benchmark/GAIA", "2023_all")[SET]
-eval_ds = eval_ds.rename_columns(
-    {"Question": "question", "Final answer": "true_answer", "Level": "task"}
-)
+# DO NOT ERASE
+# eval_ds = datasets.load_dataset("gaia-benchmark/GAIA", "2023_all")[SET]
+eval_ds = datasets.load_dataset("m-ric/agents_small_benchmark")[SET]
 
+# Standardize column names if needed
+eval_ds = eval_ds.rename_columns({
+    "answer": "true_answer"  # Adjust based on actual column names in the dataset
+})
 
 def preprocess_file_paths(row):
-    if len(row["file_name"]) > 0:
+    if row.get("file_name", "") and len(row["file_name"]) > 0:
         row["file_name"] = f"data/gaia/{SET}/" + row["file_name"]
     return row
 
-
 eval_ds = eval_ds.map(preprocess_file_paths)
 
+# Convert to DataFrame and show summary
 eval_df = pd.DataFrame(eval_ds)
 print("Loaded evaluation dataset:")
 print(pd.Series(eval_ds["task"]).value_counts())
