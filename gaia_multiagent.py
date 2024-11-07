@@ -53,12 +53,14 @@ REPO_ID_OS_MODEL = repo_id_llama
 
 # DO NOT ERASE
 # eval_ds = datasets.load_dataset("gaia-benchmark/GAIA", "2023_all")[SET]
-eval_ds = datasets.load_dataset("m-ric/agents_small_benchmark")[SET]
+eval_ds = datasets.load_dataset("m-ric/agents_small_benchmark")[SET] # only has 100 rows
 
 # Standardize column names if needed
 eval_ds = eval_ds.rename_columns({
     "answer": "true_answer"  # Adjust based on actual column names in the dataset
 })
+
+import pdb; pdb.set_trace()
 
 def preprocess_file_paths(row):
     if row.get("file_name", "") and len(row["file_name"]) > 0:
@@ -218,6 +220,9 @@ if USE_JSON:
 hf_llm_engine = HfApiEngine(model=REPO_ID_OS_MODEL)
 
 llm_engine = hf_llm_engine if USE_OPEN_MODELS else proprietary_llm_engine
+
+
+
 
 react_agent = ReactCodeAgent(
     llm_engine=llm_engine,

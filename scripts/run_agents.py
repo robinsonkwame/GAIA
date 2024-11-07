@@ -205,7 +205,10 @@ async def answer_questions(
 
     results_df = pd.DataFrame(results)
 
-    for _, example in tqdm(enumerate(dataset), total=len(dataset)):
+    for _, example in tqdm(enumerate(dataset), total=len(dataset))
+        
+
+
         if len(results_df) > 0:
             if example["question"] in results_df["question"].unique():
                 continue
