@@ -1,15 +1,14 @@
 import json
-import asyncio
 import pandas as pd
 from dotenv import load_dotenv
 
 from .utils import load_dataset_by_type
 from .agent import initialize
 
-async def main():
+def main():
     load_dotenv(override=True)
     eval_ds = load_dataset_by_type("small", "train")
-    gaia_agent = await initialize()
+    gaia_agent = initialize()
     results = []
     
     for row in eval_ds:
@@ -25,7 +24,7 @@ async def main():
             system_prompt = "You are an expert at complex reasoning and research."
             
         gaia_agent.global_context = system_prompt
-        result = await gaia_agent.run(question)
+        result = gaia_agent.run(question)
         
         results.append({
             "output": str(result),
@@ -38,4 +37,4 @@ async def main():
     df.to_json(f"results.json")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 

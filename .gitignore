@@ -2,7 +2,7 @@ data/
 downloads/
 extracted_images/
 figures/
-__pycache__/
+__pycache__
 venv/
 
 *.pyc
