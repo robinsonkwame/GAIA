@@ -22,4 +22,4 @@ AWS_BEDROCK_ID
 AWS_BEDROCK_KEY
 ```
 
-Then run `python -m src/main.py` to launch tests!
+Then run the script as a module with `python -m src.main` to launch tests!

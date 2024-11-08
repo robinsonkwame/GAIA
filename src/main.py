@@ -42,14 +42,27 @@ async def run_single_example(example, task_type, question_offset):
     # Evaluate the response
     evaluation = await evaluate_response(evaluator_client, response, example)
     
-    # Ensure response has all required fields
+    # Clean intermediate steps to ensure JSON serialization
+    cleaned_steps = []
+    for step in response["intermediate_steps"]:
+        cleaned_step = {}
+        for key, value in step.items():
+            if isinstance(value, dict):
+                # Remove any non-serializable objects from nested dicts
+                cleaned_value = {k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, list, dict))}
+                cleaned_step[key] = cleaned_value
+            else:
+                cleaned_step[key] = value
+        cleaned_steps.append(cleaned_step)
+    
+    # Create result with cleaned data
     result = {
         "question_offset": question_offset,
         "task": task_type,
         "question": example["question"],
         "true_answer": example["true_answer"],
         "output": response["output"],
-        "intermediate_steps": response["intermediate_steps"],
+        "intermediate_steps": cleaned_steps,
         "is_correct": evaluation["is_correct"],
         "evaluation_score": evaluation["score"],
         "evaluation_feedback": evaluation["feedback"]
@@ -59,6 +72,25 @@ async def run_single_example(example, task_type, question_offset):
     del gaia_agent
     
     return result
+
+def set_default(obj):
+    if isinstance(obj, set):
+        return list(obj)
+    raise TypeError
+
+def clean_for_serialization(obj, skip_keys={'shared_variables', 'kwargs', 'agent'}):
+    """Recursively clean dictionary by removing problematic keys and converting sets."""
+    if isinstance(obj, dict):
+        return {
+            k: clean_for_serialization(v, skip_keys)
+            for k, v in obj.items()
+            if k not in skip_keys
+        }
+    elif isinstance(obj, list):
+        return [clean_for_serialization(item, skip_keys) for item in obj]
+    elif isinstance(obj, set):
+        return list(obj)
+    return obj
 
 async def main():
     load_dotenv(override=True)
@@ -82,11 +114,19 @@ async def main():
     # Run selected examples
     for question_offset, example in examples_to_run:
         result = await run_single_example(example, args.task_type, question_offset)
-        results.append(result)
-        print(json.dumps(result, indent=4))
+        try:
+            cleaned_result = clean_for_serialization(result)
+            print(json.dumps(cleaned_result, indent=4))
+        except TypeError as e:
+            print(f"Warning: Could not serialize result: {e}")
+        results.append(cleaned_result)  # Store cleaned version
     
-    df = pd.DataFrame(results)
-    df.to_json(f"results.json")
+    # Save results
+    try:
+        with open("results.json", "w") as f:
+            json.dump(results, f)
+    except Exception as e:
+        print(f"Error saving results: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

@@ -18,7 +18,11 @@ def wrap_for_agent(func):
         '''Executes {func.__name__} with provided arguments and captures execution details'''
         # Execute function
         start_time = time.time()
-        result = func(shared_variables, *args, **kwargs)
+        
+        # Add shared_variables to kwargs
+        kwargs['shared_variables'] = shared_variables
+        result = func(*args, **kwargs)
+        
         end_time = time.time()
         
         # Capture execution details in shared_variables

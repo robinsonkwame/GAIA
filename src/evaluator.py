@@ -38,36 +38,64 @@ Evaluate the response for both reasoning and correctness. First provide specific
     )
     return eval_result.choices[0].message.content
 
+def is_numeric_answer(answer: str) -> bool:
+    """Check if the answer is meant to be numeric"""
+    try:
+        # Try converting to float, handling common number formatting
+        float(answer.replace(",", "").split("####")[-1].strip())
+        return True
+    except (ValueError, AttributeError):
+        return False
+
 async def evaluate_response(client: OpenAI, response: Dict, example: Dict) -> Dict:
     """Evaluate a single response against the reference answer"""
-    # Extract numerical answer from response
+    # Extract numerical answer from response if present
     response_numbers = extract_numbers(response["output"])
     final_number = response_numbers[-1] if response_numbers else None
     
-    # Get reference answer
-    if isinstance(example["true_answer"], str) and "####" in example["true_answer"]:
-        # Handle GSM8K format where answer is after ####
-        ref_parts = example["true_answer"].split("####")
-        ref_reasoning = ref_parts[0].strip()
-        ref_number = float(ref_parts[1].strip().replace(",", ""))
-    else:
-        ref_reasoning = ""
-        ref_number = float(example["true_answer"]) if example["true_answer"] else None
+    # Initialize reference values
+    ref_reasoning = ""
+    ref_number = None
+    
+    # Handle different answer formats
+    true_answer = example.get("true_answer", "")
+    
+    if isinstance(true_answer, str):
+        if "####" in true_answer:
+            # Handle GSM8K format
+            ref_parts = true_answer.split("####")
+            ref_reasoning = ref_parts[0].strip()
+            try:
+                ref_number = float(ref_parts[1].strip().replace(",", ""))
+            except ValueError:
+                ref_number = None
+        elif is_numeric_answer(true_answer):
+            # Handle pure numeric answers
+            try:
+                ref_number = float(true_answer.replace(",", ""))
+            except ValueError:
+                ref_number = None
+        else:
+            # Handle text-based answers
+            ref_reasoning = true_answer
+    elif isinstance(true_answer, (int, float)):
+        # Handle numeric true_answer
+        ref_number = float(true_answer)
 
     # Use LLM evaluation for reasoning and correctness
     eval_result = evaluate_with_llm(
         client,
         example["question"],
         response["output"],
-        example["true_answer"]
+        str(true_answer)  # Ensure string format for LLM
     )
     
     try:
         feedback, score = [item.strip() for item in eval_result.split("[RESULT]")]
         score = int(score)
         
-        # Additional numerical verification for math problems
-        if final_number is not None and ref_number is not None:
+        # Additional numerical verification only for numeric problems
+        if ref_number is not None and final_number is not None:
             numerical_match = abs(final_number - ref_number) < 0.01
             if not numerical_match:
                 score = 0
@@ -80,9 +108,10 @@ async def evaluate_response(client: OpenAI, response: Dict, example: Dict) -> Di
         "is_correct": score == 1,
         "score": score,
         "feedback": feedback,
-        "extracted_answer": final_number,
-        "reference_answer": ref_number
-    } 
+        "extracted_answer": final_number if ref_number is not None else None,
+        "reference_answer": ref_number,
+        "is_numeric": ref_number is not None
+    }
 
 def test_evaluator():
     """Test function to verify the evaluator is working correctly"""

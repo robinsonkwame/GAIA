@@ -28,17 +28,21 @@ def rate_limit(limit: float) -> Callable:
             # Update last call time
             last_call[func.__name__] = time.time()
             
+            # Extract shared_variables if present
+            shared_variables = kwargs.pop('shared_variables', None)
+            
             return func(*args, **kwargs)
         return wrapper
     return decorator
 
 @rate_limit(1.0)  # 1 second rate limit
-def wikipedia_search(query: str, num_results: Optional[int] = 2) -> str:
+def wikipedia_search(query: str, num_results: Optional[int] = 1, shared_variables: dict = None) -> str:
     """Searches Wikipedia for the given query and returns relevant article content.
     
     Args:
         query: The search query string to look up on Wikipedia
         num_results: Optional number of results to return (default: 2)
+        shared_variables: Optional shared variables dict
         
     Returns:
         str: Combined content from relevant Wikipedia articles
