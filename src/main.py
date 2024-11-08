@@ -16,7 +16,7 @@ def parse_args():
         "--example_offsets",
         type=lambda s: [int(x) for x in s.split(',')],  # Convert comma-separated string to list of ints
         help="Comma-separated list of example indices to run (e.g., '0,1,2')",
-        default=None
+        default=[0]
     )
     args = parser.parse_args()
     return args

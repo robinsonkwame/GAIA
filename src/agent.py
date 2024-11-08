@@ -3,7 +3,7 @@ from agentjo import Agent
 from agentjo_package.wrapper import ConversationWrapper
 from src.tools.file_tools import file_inspect, file_visual_qa
 from src.tools.python_tools import python_generate_and_run_tool
-from src.tools.web_tools import wikipedia_search
+from src.tools.web_tools import wikipedia_search, web_search, web_visit_page
 from functools import wraps
 import inspect
 import time
@@ -196,7 +196,9 @@ def initialize():
         wrap_for_agent(file_inspect),
         wrap_for_agent(file_visual_qa),
         wrap_for_agent(python_generate_and_run_tool),
-        wrap_for_agent(wikipedia_search)
+        wrap_for_agent(wikipedia_search),
+        wrap_for_agent(web_search),
+        wrap_for_agent(web_visit_page)
     ]
 
     # Assign wrapped functions
