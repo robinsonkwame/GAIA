@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import json
 import pandas as pd
 from dotenv import load_dotenv
@@ -7,6 +10,7 @@ import asyncio
 from .utils import load_dataset_by_type
 from .agent import initialize
 from .evaluator import initialize_evaluator, evaluate_response
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -23,14 +27,14 @@ def parse_args():
 
 async def run_single_example(example, task_type, question_offset):
     """Run a single example with a fresh agent instance and evaluate the response"""
-    gaia_agent = initialize()
+    gaia_agent = initialize(task_type)
     evaluator_client = initialize_evaluator()
     
     # Configure system prompt based on task type
     if task_type == "GSM8K":
-        system_prompt = "You are a mathematical reasoning expert."
+        system_prompt = "You are a mathematical reasoning expert. Break down problems step by step and use Python code to compute the final answer."
     elif task_type in ["HotpotQA-easy", "HotpotQA-medium"]:
-        system_prompt = "You are an internet research expert."
+        system_prompt = "You are an internet research expert. Find and synthesize information from multiple sources to answer questions accurately."
     else:
         system_prompt = "You are an expert at complex reasoning and internet research."
         
@@ -39,8 +43,14 @@ async def run_single_example(example, task_type, question_offset):
     # Run the example and get full response including intermediate steps
     response = gaia_agent.run(example["question"])
     
-    # Evaluate the response
+    # Evaluate the response 
     evaluation = await evaluate_response(evaluator_client, response, example)
+    # LEAVE COMMENTED
+    # evaluation = {
+    #     "is_correct": None,
+    #     "score": -1,
+    #     "feedback": ""
+    # }
     
     # Clean intermediate steps to ensure JSON serialization
     cleaned_steps = []
@@ -48,8 +58,8 @@ async def run_single_example(example, task_type, question_offset):
         cleaned_step = {}
         for key, value in step.items():
             if isinstance(value, dict):
-                # Remove any non-serializable objects from nested dicts
-                cleaned_value = {k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, list, dict))}
+                cleaned_value = {k: v for k, v in value.items() 
+                               if isinstance(v, (str, int, float, bool, list, dict))}
                 cleaned_step[key] = cleaned_value
             else:
                 cleaned_step[key] = value
