@@ -30,19 +30,29 @@ GOOGLE_CUSTOM_SEARCH_KEY_CX= ...
 
 The main script supports several command-line arguments to control which tests to run:
 
-1. **Run a specific task type**:
+1. **Run a specific task type or all tasks**:
 ```bash
+# Run a specific task
 python -m src.main --task_type GSM8K
 python -m src.main --task_type HotpotQA-easy
 python -m src.main --task_type HotpotQA-medium
 python -m src.main --task_type HotpotQA-hard
 python -m src.main --task_type GAIA
+
+# Run all available tasks
+python -m src.main --run_all_types
 ```
 
 2. **Control number of examples**:
 ```bash
 # Run first 5 examples of GSM8K
 python -m src.main --task_type GSM8K --num_examples 5
+
+# Run 3 examples from each task type
+python -m src.main --run_all_types --num_examples 3
+
+# Run all examples from each task type
+python -m src.main --run_all_types
 ```
 
 3. **Run specific examples by offset**:
