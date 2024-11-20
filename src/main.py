@@ -1,5 +1,8 @@
 import warnings
+warnings.simplefilter('ignore')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", "Importing LLMs from langchain.*")
 
 import json
 import pandas as pd
@@ -15,14 +18,19 @@ from .evaluator import initialize_evaluator, evaluate_response
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task_type", type=str, required=False, help="Type of task to test (e.g. GSM8K, HotpotQA-easy)", default="GSM8K")
-    parser.add_argument("--num_examples", type=int, default=1, help="Number of examples to run")
+    parser.add_argument("--num_examples", type=int, default=1, help="Number of examples to run per task type")
     parser.add_argument(
         "--example_offsets",
-        type=lambda s: [int(x) for x in s.split(',')],  # Convert comma-separated string to list of ints
+        type=lambda s: [int(x) for x in s.split(',')],
         help="Comma-separated list of example indices to run (e.g., '0,1,2')",
         default=[0]
     )
+    parser.add_argument("--run_all_types", action="store_true", help="Run examples for all available task types")
     args = parser.parse_args()
+    
+    if args.run_all_types:
+        args.task_type = None
+    
     return args
 
 async def run_single_example(example, task_type, question_offset):
@@ -109,28 +117,40 @@ async def main():
     
     args = parse_args()
 
-    # Filter dataset for requested task type
-    task_examples = [row for row in eval_ds if row["task"] == args.task_type]
+    # Get unique task types from dataset
+    all_task_types = list(set(row["task"] for row in eval_ds))
     
-    if not task_examples:
-        raise ValueError(f"No examples found for task type: {args.task_type}")
+    # Determine which task types to run
+    task_types_to_run = all_task_types if args.run_all_types else [args.task_type]
+    if not args.run_all_types and not args.task_type:
+        raise ValueError("Must specify either --task_type or --run_all_types")
+
+    # Process each task type
+    for task_type in task_types_to_run:
+        task_examples = [row for row in eval_ds if row["task"] == task_type]
         
-    # Select examples to run
-    if args.example_offsets is not None:
-        examples_to_run = [(idx, task_examples[idx]) for idx in args.example_offsets]
-    else:
-        examples_to_run = [(idx, example) for idx, example in enumerate(task_examples[:args.num_examples])]
-    
-    # Run selected examples
-    for question_offset, example in examples_to_run:
-        result = await run_single_example(example, args.task_type, question_offset)
-        try:
-            cleaned_result = clean_for_serialization(result)
-            print(json.dumps(cleaned_result, indent=4))
-        except TypeError as e:
-            print(f"Warning: Could not serialize result: {e}")
-        results.append(cleaned_result)  # Store cleaned version
-    
+        if not task_examples:
+            print(f"Warning: No examples found for task type: {task_type}")
+            continue
+            
+        # Select examples to run
+        if args.example_offsets is not None:
+            examples_to_run = [(idx, task_examples[idx]) for idx in args.example_offsets]
+        else:
+            examples_to_run = [(idx, example) for idx, example in enumerate(task_examples[:args.num_examples])]
+        
+        print(f"\nProcessing {len(examples_to_run)} examples for task type: {task_type}")
+        
+        # Run selected examples
+        for question_offset, example in examples_to_run:
+            result = await run_single_example(example, task_type, question_offset)
+            try:
+                cleaned_result = clean_for_serialization(result)
+                print(json.dumps(cleaned_result, indent=4))
+            except TypeError as e:
+                print(f"Warning: Could not serialize result: {e}")
+            results.append(cleaned_result)
+
     # Save results
     try:
         with open("results.json", "w") as f:

@@ -11,6 +11,8 @@ from typing import List, Dict
 from PyPDF2 import PdfReader
 from io import BytesIO
 from markdown import markdown as md
+from bs4 import BeautifulSoup
+import re
 
 # Load environment variables at module level
 load_dotenv(override=True)
@@ -180,6 +182,17 @@ def web_search(query: str, shared_variables: dict = None) -> List[Dict]:
     except Exception as e:
         return [{"error": f"Error searching the web: {str(e)}"}]
 
+def clean_text(text: str) -> str:
+    """Clean and normalize text content"""
+    # Remove multiple newlines and whitespace
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    text = re.sub(r'\s+', ' ', text)
+    # Remove markdown artifacts
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'[#*_`]', '', text)
+    return text.strip()
+
 @rate_limit(1.0)
 def web_visit_page(url: str, shared_variables: dict = None) -> str:
     """Visits a webpage and extracts its main content.
@@ -192,6 +205,18 @@ def web_visit_page(url: str, shared_variables: dict = None) -> str:
         str: The extracted main content of the webpage
     """
     header, content = browser.visit_page(url)
+    
+    # Convert HTML to plain text if content appears to be HTML
+    if '<' in content and '>' in content:
+        soup = BeautifulSoup(content, 'html.parser')
+        # Remove script and style elements
+        for script in soup(["script", "style", "meta", "link"]):
+            script.decompose()
+        content = soup.get_text()
+    
+    # Clean and normalize the text
+    content = clean_text(content)
+    
     return header + "\n=======================\n" + content
 
 @rate_limit(1.0)

@@ -9,7 +9,7 @@ def setup_llm():
     def llm(system_prompt: str, user_prompt: str) -> str:
         client = OpenAI()
         response = client.chat.completions.create(
-            model='gpt-4-turbo-preview',
+            model='gpt-4o', # DO NOT CHANGE THIS
             temperature=0,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -72,19 +72,45 @@ class Agent(AgentJo):
 
     def reply_user(self, user_input: str, stateful: bool = True) -> str:
         """Process user input and generate response"""
-        # For mathematical questions, we'll use python_generate_and_run_tool
-        if "GSM8K" in self.shared_variables.get('task_type', ''):
+        task_type = self.shared_variables.get('task_type', '')
+        
+        # Handle GSM8K math problems
+        if "GSM8K" in task_type:
             code_result = self.use_function(
                 'python_generate_and_run_tool',
                 {'instruction': user_input}
             )
-            # Extract the final number from the code result
             if isinstance(code_result, dict) and 'output_1' in code_result:
                 result = code_result['output_1'].split('\n')[-1]
                 return f"The answer is {result} minutes."
             return str(code_result)
         
-        # For other questions, use the default LLM response
+        # Handle HotpotQA research questions
+        elif "HotpotQA" in task_type:
+            # First, try Wikipedia search
+            wiki_result = self.use_function(
+                'wikipedia_search',
+                {'query': user_input}
+            )
+            
+            # If Wikipedia doesn't yield enough info, try web search
+            if not wiki_result or "No results found" in str(wiki_result):
+                search_result = self.use_function(
+                    'web_search',
+                    {'query': user_input}
+                )
+                
+                # Visit promising URLs from search results
+                if search_result and isinstance(search_result, list):
+                    for url in search_result[:2]:  # Visit top 2 results
+                        page_content = self.use_function(
+                            'web_visit_page',
+                            {'url': url}
+                        )
+                        # Store in shared variables for context
+                        self.shared_variables['task_state']['resources_used'].add(url)
+        
+        # Use default LLM response with accumulated context
         return super().reply_user(user_input, stateful=stateful)
 
 def initialize(task_type="GSM8K"):
@@ -92,11 +118,47 @@ def initialize(task_type="GSM8K"):
     if task_type == "GSM8K":
         name = 'Mathematical Reasoning Expert'
         description = 'An expert agent specialized in solving mathematical word problems through careful step-by-step reasoning and computation'
-        system_prompt = "You are a mathematical reasoning expert. Break down problems step by step and use Python code to compute the final answer."
-    elif task_type in ["HotpotQA-easy", "HotpotQA-medium"]:
+        system_prompt = """
+        1. For mathematical calculations:
+            - Write Python code to compute values, especially for chained formulas
+            - Show your work step-by-step
+            - Verify results match intuitive estimates
+        2. Always explain your reasoning process
+        3. Double-check your work before providing final answer
+        4. Examine the question answer phrasing and use that to express the answer as required.
+        """
+    elif task_type in ["HotpotQA-easy", "HotpotQA-medium", "HotpotQA-hard"]:
         name = 'Research Expert'
-        description = 'An expert agent specialized in finding and synthesizing information from multiple sources to answer complex questions'
-        system_prompt = "You are an internet research expert. Find and synthesize information from multiple sources to answer questions accurately."
+        description = 'An expert agent specialized in finding and synthesizing information from multiple sources'
+        system_prompt = """You are an internet research expert. Follow these steps for each question:
+1. Search Wikipedia first for relevant information
+2. If needed, perform web searches for additional context
+3. Visit specific pages to gather detailed information
+4. Synthesize information from all sources to provide a complete, accurate answer
+5. Always cite your sources in the response"""
+
+    elif task_type == "GAIA":
+        name = 'General AI Assistant'
+        description = 'An expert agent specialized in solving real-world questions requiring multi-modal reasoning, web search, and tool use'
+        system_prompt = """You are an advanced AI assistant focused on solving real-world questions that require multiple capabilities. Follow these steps:
+
+1. Carefully analyze the question to identify required capabilities (reasoning, math, web search, etc.)
+2. Break down complex problems into simpler sub-problems
+3. For mathematical calculations:
+   - Write Python code to compute values, especially for chained formulas
+   - Show your work step-by-step
+   - Verify results match intuitive estimates
+4. For research questions:
+   - Search authoritative sources
+   - Cross-reference information
+   - Synthesize findings into a clear answer
+5. Always explain your reasoning process
+6. Double-check your work before providing final answer
+7. Examine the question answer phrasing and use that to express the answer as required.
+
+Remember: Focus on accuracy and reliability over complexity. If a simple approach works, use it."""
+
+
     else:
         name = 'GaiaAgentJo'
         description = 'An agent that can solve various types of tasks using web search, reasoning, and mathematical calculations'

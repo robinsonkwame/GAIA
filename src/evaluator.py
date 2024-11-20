@@ -29,7 +29,7 @@ Evaluate the response for both reasoning and correctness. First provide specific
 0 - if either reasoning is unclear/incorrect or the final answer is wrong"""
 
     eval_result = client.chat.completions.create(
-        model='gpt-4o-mini',
+        model='gpt-4o', # DO NOT CHANGE THIS
         temperature=0,
         messages=[
             {"role": "system", "content": system_prompt},
