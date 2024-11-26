@@ -37,17 +37,7 @@ async def run_single_example(example, task_type, question_offset):
     """Run a single example with a fresh agent instance and evaluate the response"""
     gaia_agent = initialize(task_type)
     evaluator_client = initialize_evaluator()
-    
-    # Configure system prompt based on task type
-    if task_type == "GSM8K":
-        system_prompt = "You are a mathematical reasoning expert. Break down problems step by step and use Python code to compute the final answer."
-    elif task_type in ["HotpotQA-easy", "HotpotQA-medium"]:
-        system_prompt = "You are an internet research expert. Find and synthesize information from multiple sources to answer questions accurately."
-    else:
-        system_prompt = "You are an expert at complex reasoning and internet research."
-        
-    gaia_agent.global_context = system_prompt
-    
+
     # Run the example and get full response including intermediate steps
     response = gaia_agent.run(example["question"])
     
@@ -134,7 +124,7 @@ async def main():
             continue
             
         # Select examples to run
-        if args.example_offsets is not None:
+        if args.example_offsets and args.example_offsets != [0]:  # Only use offsets if explicitly provided
             examples_to_run = [(idx, task_examples[idx]) for idx in args.example_offsets]
         else:
             examples_to_run = [(idx, example) for idx, example in enumerate(task_examples[:args.num_examples])]
@@ -161,4 +151,4 @@ async def main():
         print(f"Error saving results: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
