@@ -153,8 +153,10 @@ async def main():
 
     # Save results
     try:
-        with open("results.json", "w") as f:
-            json.dump(results, f)
+        with open("results.jsonl", "w") as f:
+            for result in results:
+                json.dump(result, f)
+                f.write('\n')
     except Exception as e:
         print(f"Error saving results: {e}")
 
