@@ -3,7 +3,7 @@ from agentjo import Agent as AgentJo
 from src.tools.file_tools import file_inspect, file_visual_qa
 from src.tools.python_tools import python_generate_and_run_tool
 from src.tools.web_tools import wikipedia_search, web_search, web_visit_page
-import time
+import re
 
 def setup_llm():
     def llm(system_prompt: str, user_prompt: str) -> str:
@@ -70,45 +70,92 @@ class Agent(AgentJo):
         
         return result
 
-    def reply_user(self, user_input: str, stateful: bool = True) -> str:
+    def reply_user(self, user_input: str, files: list = [], stateful: bool = True) -> str:
         """Process user input and generate response"""
         task_type = self.shared_variables.get('task_type', '')
         
+        # Dynamically adjust available functions based on input
+        file_related = bool(files) or any(word in user_input.lower() for word in ['file', 'read', 'document'])
+        
+        # Track current function state
+        had_file_functions = any(func.startswith('file_') for func in self.function_map.keys())
+        
+        if file_related and not had_file_functions:
+            # Add file functions if needed
+            file_functions = [file_inspect, file_visual_qa]
+            self.assign_functions(file_functions)
+            # Update global context with file information
+            file_list = files if files else ["No specific files provided"]
+            self.global_context = f"{self.global_context}\nAvailable files: {file_list}"
+            
+        elif not file_related and had_file_functions:
+            # Remove file functions if present
+            for func_name in ['file_inspect', 'file_visual_qa']:
+                self.remove_function(func_name)
+            # Remove file information from global context
+            self.global_context = re.sub(r'\nAvailable files:.*', '', self.global_context)
+
         # Handle GSM8K math problems
         if "GSM8K" in task_type:
             code_result = self.use_function(
                 'python_generate_and_run_tool',
                 {'instruction': user_input}
             )
-            if isinstance(code_result, dict) and 'output_1' in code_result:
+            
+            # Get the calculation steps from the code execution
+            calculation_steps = ""
+            if isinstance(code_result, dict):
+                calculation_steps = code_result.get('code', '')
                 result = code_result['output_1'].split('\n')[-1]
-                return f"The answer is {result} minutes."
-            return str(code_result)
+            else:
+                result = str(code_result)
+            
+            # Get the reasoning steps from the LLM
+            reasoning = super().reply_user(
+                f"Explain the reasoning steps for solving this problem: {user_input}",
+                stateful=False
+            )
+            
+            return f"""
+REASONING:
+{reasoning}
+
+CALCULATIONS:
+{calculation_steps}
+
+FINAL ANSWER: The answer is {result} minutes.
+"""
         
         # Handle HotpotQA research questions
         elif "HotpotQA" in task_type:
-            # First, try Wikipedia search
-            wiki_result = self.use_function(
-                'wikipedia_search',
-                {'query': user_input}
-            )
+            # Gather information as before
+            wiki_result = self.use_function('wikipedia_search', {'query': user_input})
+            search_results = []
+            page_contents = []
             
-            # If Wikipedia doesn't yield enough info, try web search
             if not wiki_result or "No results found" in str(wiki_result):
-                search_result = self.use_function(
-                    'web_search',
-                    {'query': user_input}
-                )
-                
-                # Visit promising URLs from search results
-                if search_result and isinstance(search_result, list):
-                    for url in search_result[:2]:  # Visit top 2 results
-                        page_content = self.use_function(
-                            'web_visit_page',
-                            {'url': url}
-                        )
-                        # Store in shared variables for context
+                search_results = self.use_function('web_search', {'query': user_input})
+                if search_results and isinstance(search_results, list):
+                    for url in search_results[:2]:
+                        page_content = self.use_function('web_visit_page', {'url': url})
+                        page_contents.append(page_content)
                         self.shared_variables['task_state']['resources_used'].add(url)
+
+            # Format response with explicit instruction about answer format
+            format_instruction = f"""
+Based on the gathered information, provide an answer to: {user_input}
+
+Important:
+1. Structure your response with clear logical steps
+2. Pay attention to any units or specific formats requested in the question
+3. Format numerical values as requested (e.g., use 'thousand' instead of '000' if appropriate)
+4. Ensure your final answer exactly matches the format implied by the question
+
+Sources used:
+{list(self.shared_variables['task_state']['resources_used'])}
+"""
+            # Get formatted response from LLM
+            return super().reply_user(format_instruction, stateful=stateful)
         
         # Use default LLM response with accumulated context
         return super().reply_user(user_input, stateful=stateful)
@@ -119,13 +166,27 @@ def initialize(task_type="GSM8K"):
         name = 'Mathematical Reasoning Expert'
         description = 'An expert agent specialized in solving mathematical word problems through careful step-by-step reasoning and computation'
         system_prompt = """
-        1. For mathematical calculations:
-            - Write Python code to compute values, especially for chained formulas
-            - Show your work step-by-step
+        You are a mathematical reasoning expert. For each problem:
+
+        1. First explain your approach in clear steps
+        2. For mathematical calculations:
+            - Write Python code to compute values
+            - Show intermediate results for each calculation
             - Verify results match intuitive estimates
-        2. Always explain your reasoning process
-        3. Double-check your work before providing final answer
-        4. Examine the question answer phrasing and use that to express the answer as required.
+        3. Format your response as follows:
+            REASONING:
+            - List each logical step in the solution
+            - Explain why each step is necessary
+            
+            CALCULATIONS:
+            - Show all mathematical operations
+            - Include units in calculations
+            - Show intermediate results
+            
+            FINAL ANSWER: Express the answer in the required format
+            
+        4. Double-check all calculations before providing the final answer
+        5. Always include units in your answer
         """
     elif task_type in ["HotpotQA-easy", "HotpotQA-medium", "HotpotQA-hard"]:
         name = 'Research Expert'
@@ -135,7 +196,13 @@ def initialize(task_type="GSM8K"):
 2. If needed, perform web searches for additional context
 3. Visit specific pages to gather detailed information
 4. Synthesize information from all sources to provide a complete, accurate answer
-5. Always cite your sources in the response"""
+5. Always cite your sources in the response
+6. Important formatting rules:
+   - Pay careful attention to units in the question and answer
+   - If the question asks for a number in specific units (e.g., thousands), convert accordingly
+   - Format numerical values as requested (e.g., "17 thousand" not "17,000")
+   - Structure your answer to match the exact format requested in the question
+   - Double-check your final answer format matches what was asked"""
 
     elif task_type == "GAIA":
         name = 'General AI Assistant'
@@ -186,10 +253,8 @@ Remember: Focus on accuracy and reliability over complexity. If a simple approac
         llm=setup_llm()
     )
 
-    # Create list of functions to assign
+    # Create list of functions to assign - remove file functions from default list
     functions = [
-        file_inspect,
-        file_visual_qa,
         python_generate_and_run_tool,
         wikipedia_search,
         web_search,
