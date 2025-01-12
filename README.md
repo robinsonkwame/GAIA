@@ -1,6 +1,8 @@
 # Beating GAIA with AgentJo 🚀
 
 
+### This project on haitus due to weaker fit with my research portfolio, but the codebase can be used to apply AgentJo to other agent based challenges!
+
 ### How to run tests?
 
 First, install requirements:
